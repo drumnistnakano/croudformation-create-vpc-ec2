@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  # VPC
+  FirstVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: FirstVPC
+  # Public Subnet
+  CfPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.5.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: ap-northeast-1a
+      VpcId: !Ref FirstVPC
+      Tags:
+        - Key: Name
+          Value: CfPublicSubnet
+  # Private Subnet
+  CfPrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.10.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: ap-northeast-1c
+      VpcId: !Ref FirstVPC
+      Tags:
+        - Key: Name
+          Value: CfPrivateSubnet
+  # InternetGateway
+  CfInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: CfInternetGateway
+  # InternetGatewayのアタッチ
+  CfAttachCfInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref FirstVPC
+      InternetGatewayId: !Ref CfInternetGateway
+  # Public Subnet用ルートテーブル
+  CfRouteTableForPublicSubnet:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref FirstVPC
+      Tags:
+        - Key: Name
+          Value: CfRouteTableForPublicSubnet
+  # InternetGatewayへのルート
+  CfRouteForPublicSubnet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref CfRouteTableForPublicSubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref CfInternetGateway
+  # ルートテーブルのアタッチ
+  CfAssociateRouteTableForPublicSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref CfPublicSubnet
+      RouteTableId: !Ref CfRouteTableForPublicSubnet
+  # EC2(Public Subnet)のセキュリティグループ
+  CfSecurityGroupForPublicServer:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: CfSecurityGroupForPublicServer
+      GroupDescription: CfSecurityGroupForPublicServer
+      VpcId: !Ref FirstVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: CfSecurityGroupForPublicServer
+  # EC2(Public Subnet)
+  CfPublicServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: # {key-name}
+      ImageId: ami-0ff21806645c5e492
+      InstanceType: t2.micro
+      Monitoring: false
+      NetworkInterfaces:
+        - SubnetId: !Ref CfPublicSubnet
+          GroupSet:
+          - !Ref CfSecurityGroupForPublicServer
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+      Tags:
+        - Key: Name
+          Value: CfPublicServer
+  # ElasticIP
+  CfElasticIpForPublicServer:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref CfPublicServer
+  # EC2(Private Subnet)のセキュリティグループ
+  CfSecurityGroupForPrivateServer:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: CfSecurityGroupForPrivateServer
+      GroupDescription: CfSecurityGroupForPrivateServer
+      VpcId: !Ref FirstVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref CfSecurityGroupForPublicServer
+      Tags:
+        - Key: Name
+          Value: CfSecurityGroupForPrivateServer
+  # EC2(Private Subnet)
+  CfPrivateServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: # {key-name}
+      ImageId: ami-0ff21806645c5e492
+      InstanceType: t2.micro
+      Monitoring: false
+      NetworkInterfaces:
+        - SubnetId: !Ref CfPrivateSubnet
+          GroupSet:
+          - !Ref CfSecurityGroupForPrivateServer
+          DeviceIndex : 0
+      Tags:
+        - Key: key
+          Value: value
